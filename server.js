@@ -1,57 +1,10 @@
 const puppeteer = require('puppeteer')
 const fs = require('fs')
 const axios = require('axios')
-const fundIds = require('./ids.json')
-const fundObjects = require('./funds.json')
 
-// Important tags
-/*
-"PurchasePrice": 127.53,
-"SellPrice": 127.53,
-"CreationPrice": 127.53,
-"UnitValuePrice": 127.53,
-"UnitValueValidDate": "2020-04-07T00:00:00",
-"DayYield": 0.03,
-"ShowDayYield": true,
-"DailyRemark": null,
-"PosNegYield": 1,
-"CorrectTradeDate": "2020-04-07T00:00:00",
-"IsKosherFund": false,
-"MachamTotal": "3.255",
-"DisclosureDateOfReport": "2020-03-31T00:00:00",
-"StockType": 1,
-"FundType": 2,
-"RegisteredCapitalPaid": null,
-"PersonalFolderLink": null,
-"MonthShowYield": true,
-"MonthYield": 0.82,
-"MonthPosNeg": 1,
-"MonthAverage": 0.825,
-"MonthDesc": "תשואה מתחילת החודש ב-%",
-"MonthRemark": null,
-"YearShowYield": true,
-"YearYield": -2.99,
-"YearPosNeg": -1,
-"YearAverage": -2.93,
-"YearDesc": "תשואה מתחילת השנה ב-%",
-"YearRemark": null,
-"Last12MonthShowYield": true,
-"Last12MonthYield": -2.85,
-"Last12MonthPosNeg": -1,
-"Last12MonthAverage": -2.796666,
-"Last12MonthDesc": "תשואה 12 חודשים ב-%",
-"Last12MonthRemark": null,
-*/
-
-// Sleep for a certain number of seconds
-const sleep = (seconds) => {
-    return new Promise(resolve => {
-        setTimeout(resolve, seconds * 1000)
-    })
-}
-
-// Get the paper ids from tase
+// Will scrape the TASE website, get a list of ids, for all of the available trust-funds and ETFs
 const getFundIds = () => {
+
     return new Promise(async resolve => {
 
         // Open the page
@@ -82,11 +35,42 @@ const getFundIds = () => {
             })
             return ids
         })
-    
-        // Write IDs to a JSON file
-        fs.writeFile('ids.json', JSON.stringify(ids), e => {
-            if (e) throw e
-            else resolve()
+
+        await browser.close().then(() => console.log('- IDs scraped successfully'))
+        resolve(ids)
+    })
+}
+
+// Go through all funds and parse them
+const parseFunds = fundIds => {
+
+    return new Promise(async resolve => {
+        const funds = []
+        for (let id of fundIds){
+
+            // Get the fund object
+            const fund = await getFundInfo(id)
+            if (fund) funds.push(fund)
+            else continue
+        }
+
+        // Sort the funds by ascending fees
+        funds.sort((a, b) => {
+            const feeA = a.managementFee + a.trusteeFee + a.variableFee
+            const feeB = b.managementFee + b.trusteeFee + b.variableFee
+
+            if (feeA > feeB) return 1
+            else if (feeA < feeB) return -1
+            else return 0
+        })
+
+        // Write to a JSON file
+        fs.writeFile('funds.json', JSON.stringify(funds), e => {
+            if (e) console.log(e)
+            else{
+                console.log('- The file has been written successfully')
+                resolve()
+            }
         })
     })
 }
@@ -155,44 +139,9 @@ const getFundInfo = id => {
     })
 }
 
-// Go through all funds and parse them
-const parseFunds = async () => {
-
-    const funds = []
-    for (let id of fundIds){
-
-        // Get the fund object
-        const fund = await getFundInfo(id)
-        if (fund) funds.push(fund)
-        else continue
-    }
-
-    // Process finished, write to a JSON file
-    fs.writeFile('funds.json', JSON.stringify(funds), e => {
-        if (e) console.log(e)
-        else console.log('done')
-    })
+const main = async () => {
+    const ids = await getFundIds()
+    await parseFunds(ids).then(() => process.exit())
 }
 
-// Sort the funds by ascending fees, then write as a JSON file
-const sortFunds = () => {
-    
-    // Sort by fees
-    fundObjects.sort((a, b) => {
-        const feeA = a.managementFee + a.trusteeFee + a.variableFee
-        const feeB = b.managementFee + b.trusteeFee + b.variableFee
-
-        if (feeA > feeB) return 1
-        else if (feeA < feeB) return -1
-        else return 0
-    })
-
-    // Write to file
-    fs.writeFile('sortedFunds.json', JSON.stringify(fundObjects), e => {
-        if (e) console.log(e)
-        else console.log('done')
-    })
-}
-
-sortFunds()
-//parseFunds()
+main()
